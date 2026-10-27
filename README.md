@@ -50,8 +50,10 @@ Pi / Claude Code / 其他实现了 Agent Skills 规范的宿主都能读。
 ```bash
 # macOS
 brew install ghostscript
-pip install weasyprint pypdfium2 pypdf Pillow python-pptx python-docx openpyxl beautifulsoup4 requests
+pip install -r requirements.txt
 ```
+
+> `ghostscript` 是系统依赖（`gs` 命令），pip 装不了，必须单独装。
 
 > **macOS 注意**：`weasyprint` 必须先 `a4env.prepare()` 设好 `DYLD_FALLBACK_LIBRARY_PATH` 才能 import。裸 `import weasyprint` 一定失败，那不是缺包，别急着 `pip install`。`scripts/a4` 已经把这一步包进去了——**所有调用都走它**。
 
@@ -141,6 +143,8 @@ scripts/a4env.py            weasyprint 环境准备 + fontconfig 隔离
 references/layout-spec.md   版面规格、字号档位、分页铁律
 references/density-rules.md A/B/C 压缩规则、分格式策略
 regress.py                  回归测试
+requirements.txt            Python 依赖
+.github/workflows/ci.yml    CI：回归 + 端到端冒烟
 ```
 
 ## License
