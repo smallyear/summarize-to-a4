@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
+      # 两个 job 并行时，会同时向同一个 apt 源拉 fonts-noto-cjk（61MB），
+      # 实测其中一个会卡在「安装系统依赖」十几分钟不结束。串行避开抢带宽。
+      max-parallel: 1
       matrix:
         python: ["3.10", "3.12"]
 
