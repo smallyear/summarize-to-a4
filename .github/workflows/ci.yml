@@ -26,13 +26,26 @@ jobs:
       # weasyprint 需要 pango/harfbuzz/cairo；中文要字体，否则渲染成豆腐块
       # ghostscript 用于文字转曲（没它 topdf 会降级并 warning）
       - name: 安装系统依赖
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
-            libcairo2 libgdk-pixbuf-2.0-0 \
-            fonts-noto-cjk \
-            ghostscript
+          # runner 侧 apt 镜像偶尔会卡住（表现为一直 in_progress）。
+          # 加超时 + 重试，避免一个网络抖动把 job 拖到 6 小时上限。
+          set -euo pipefail
+          sudo apt-get update -o Acquire::Retries=5
+          for attempt in 1 2 3; do
+            if sudo apt-get install -y --no-install-recommends \
+                 -o Acquire::Retries=5 \
+                 libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+                 libcairo2 libgdk-pixbuf-2.0-0 \
+                 fonts-noto-cjk \
+                 ghostscript; then
+              exit 0
+            fi
+            echo "apt 安装失败，第 $attempt 次重试…"
+            sudo apt-get update -o Acquire::Retries=5 && sleep 10
+          done
+          echo "apt 安装连续 3 次失败" >&2
+          exit 1
 
       - name: 安装 Python 依赖
         run: |
