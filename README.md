@@ -1,5 +1,7 @@
 # summarize-to-a4
 
+> 让 A4 纸变成你的第 X 块屏幕。
+
 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压成「尽量少纸张」的可打印 A4 PDF。
 
 一个 [Agent Skill](https://agentskills.io/specification)：长文档进来，1–6 页速览版出去。

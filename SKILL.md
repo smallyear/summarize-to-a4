@@ -7,6 +7,8 @@ compatibility: 需要 Python 3.10+、ghostscript（gs）用于文字转曲，以
 
 # summarize-to-a4
 
+> 让 A4 纸变成你的第 X 块屏幕。
+
 把任意来源压成「尽量少纸张」的可打印 A4 PDF。
 
 ## 它保证什么
