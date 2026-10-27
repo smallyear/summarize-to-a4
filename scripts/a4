@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# summarize-to-a4 统一入口：把解释器探测、环境准备、参数转发一次做完。
+#
+# 为什么需要它：宿主每次执行 bash 都是新 shell，SKILL.md 里 `S=...` / `PY=...`
+# 这类变量在下一步就没了。所有调用都走这个脚本，就不依赖跨调用的 shell 状态。
+#
+# 用法：
+#   a4 extract <输入> -o <out.md>
+#   a4 render  <outline.md> -o <out.html> --target-pages N [--title ...]
+#   a4 topdf   <out.html> -o <out.pdf>
+#   a4 verify  <out.pdf> [--target-pages N] [--thumb <thumb.png>]
+#   a4 env                 # 打印环境自检结果
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPTS="$SKILL_DIR/scripts"
+
+# 解释器：优先 $A4_PYTHON，其次已知的 weasyprint 环境，最后系统 python3。
+pick_python() {
+  if [ -n "${A4_PYTHON:-}" ] && [ -x "${A4_PYTHON}" ]; then echo "$A4_PYTHON"; return; fi
+  for cand in \
+    "$HOME/.workbuddy/binaries/python/envs/default/bin/python" \
+    "$HOME/.venv/bin/python" \
+    "$SKILL_DIR/.venv/bin/python"
+  do
+    [ -x "$cand" ] && { echo "$cand"; return; }
+  done
+  command -v python3
+}
+PY="$(pick_python || true)"
+if [ -z "$PY" ]; then
+  echo "找不到 python3：请先安装，或用 A4_PYTHON=/path/to/python 指定解释器" >&2
+  exit 127
+fi
+
+export PYTHONDONTWRITEBYTECODE=1   # 不在 skill 目录里留 __pycache__
+
+cmd="${1:-}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  extract|render|topdf|verify)
+    exec "$PY" "$SCRIPTS/$cmd.py" "$@"
+    ;;
+  env)
+    "$PY" - "$SCRIPTS" <<'EOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+try:
+    import a4env
+    a4env.prepare()
+except Exception as exc:
+    print("a4env:", exc)
+ok = True
+try:
+    import weasyprint, pypdfium2, pypdf, PIL
+    print("render ok", weasyprint.__version__)
+except Exception as exc:
+    ok = False
+    print("render FAIL:", exc)
+try:
+    import docx, openpyxl, bs4, requests, pptx
+    print("parse ok")
+except Exception as exc:
+    ok = False
+    print("parse FAIL:", exc)
+import shutil
+print("gs:", shutil.which("gs") or "缺失（无法转曲，打印可能乱码）")
+print("slidep:", shutil.which("slidep") or "缺失（pptx 走 python-pptx 回退）")
+print("python:", sys.executable, sys.version.split()[0])
+sys.exit(0 if ok else 1)
+EOF
+    ;;
+  *)
+    cat <<'USAGE'
+summarize-to-a4 入口
+
+  a4 extract <输入> -o <out.md>                  解析任意格式为 Markdown
+  a4 render  <outline.md> -o <out.html> --target-pages N
+  a4 topdf   <out.html> -o <out.pdf>             转曲输出可打印 PDF
+  a4 verify  <out.pdf> [--target-pages N] [--thumb <png>]
+  a4 env                                         环境自检
+
+解释器可用 A4_PYTHON 覆盖。
+USAGE
+    [ -z "$cmd" ] && exit 1 || exit 2
+    ;;
+esac

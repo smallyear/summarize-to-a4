@@ -1,0 +1,40 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ---- 本地工具运行产物 ----
+# slidep（PPTX 结构化抽取）会在 cwd 写日志，含本机绝对路径与端口，不要提交
+.slidep/
+# 宿主会话记忆，私有
+.workbuddy/
+
+# ---- 工作产物（skill 跑起来后在 cwd 生成）----
+# extract.py / render.py / topdf.py / verify.py 的中间态与交付物
+*.source.md
+*.outline.md
+*_thumb.png
+*.pdf
+*.html
+
+# 但仓库里自带的那几个 HTML/PDF 结尾的文档若将来需要，可用 ! 显式放行，例如：
+# !docs/example.html
+
+# ---- 编辑器 / 系统 ----
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# ---- 临时目录（部分工具会落在仓库内）----
+.a4tmp/
+tmp/
