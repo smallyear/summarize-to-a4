@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  regress:
+    name: 回归测试 (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      # weasyprint 需要 pango/harfbuzz/cairo；中文要字体，否则渲染成豆腐块
+      # ghostscript 用于文字转曲（没它 topdf 会降级并 warning）
+      - name: 安装系统依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+            libcairo2 libgdk-pixbuf-2.0-0 \
+            fonts-noto-cjk \
+            ghostscript
+
+      - name: 安装 Python 依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install weasyprint pypdfium2 pypdf Pillow \
+            python-pptx python-docx openpyxl beautifulsoup4 requests
+
+      - name: 环境自检
+        run: ./scripts/a4 env
+
+      - name: 跑回归测试
+        run: python3 regress.py
+
+      # 冒烟测试：真正产出一份 PDF，验证端到端可用（不只是单测）
+      # 冒烟测试：真正产出一份 PDF，验证端到端可用（不只是单测）
+      - name: 端到端冒烟测试
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          # 用 printf 而不是 heredoc：heredoc 正文会被 YAML 缩进污染，
+          # 生成的 Markdown 每行带前导空格，会被当成续行/代码块，静默改变结构。
+          {
+            printf '%s\n' '# 冒烟测试' ''
+            printf '%s\n' '## 一、核心结论' ''
+            printf '%s\n' '营收 **128.4 亿元**（+18.2%），毛利率 34.2%。' ''
+            printf '%s\n' '| 指标 | 2025 |' '|---|---|' '| 营收 | 128.4 |' '| 毛利率 | 34.2% |' ''
+            printf '%s\n' '> ! 原材料价格波动可能影响毛利率 1–3 个百分点。'
+          } > in.md
+          A4="$GITHUB_WORKSPACE/scripts/a4"
+          "$A4" render in.md -o out.html --target-pages 1 --title "冒烟测试"
+          "$A4" topdf out.html -o out.pdf
+          "$A4" verify out.pdf --target-pages 1 --thumb thumb.png
+          test -s out.pdf
+
+      - name: 上传 PDF 与缩略图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-pdf-py${{ matrix.python }}
+          path: |
+            /tmp/smoke/out.pdf
+            /tmp/smoke/thumb.png
+          if-no-files-found: warn
