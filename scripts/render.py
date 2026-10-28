@@ -345,11 +345,20 @@ def main() -> int:
         ap.error("--target-pages 必须 ≥ 1")
 
     a4env.prepare()
+    warn = []
+    # 缺中文字体时 weasyprint 静默渲染成豆腐块，verify 也查不出来（转曲后只剩路径）。
+    # 在渲染阶段就挑明，否则会交出一份满纸方块却"全部检查通过"的 PDF。
+    if a4env.missing_cjk_font():
+        warn.append(
+            "系统缺少中文字体（fc-list :lang=zh 为空），PDF 里的中文会显示成豆腐块；"
+            "Linux 请装 fonts-noto-cjk"
+        )
     md = Path(args.md).read_text(encoding="utf-8")
     body, doc_title = to_html(md, given_title=args.title)
     title = args.title or doc_title or "摘要"
     # 标题没被正文提供也没被指定时提示，避免交出「摘要 / 摘要」这种空壳标题
-    warn = [] if (args.title or doc_title) else ["outline 里没有 `#` 且未传 --title，标题回落为「摘要」"]
+    if not (args.title or doc_title):
+        warn.append("outline 里没有 `#` 且未传 --title，标题回落为「摘要」")
 
     # target_pages 是上限，字号是手段：从最大档往下试，取第一个塞得进 target 的档，
     # 即「不超过 N 页」前提下用尽可能大的字号。全档都塞不进时才退到页数最少的档。

@@ -2,7 +2,7 @@
 name: summarize-to-a4
 description: 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压缩成「尽量少纸张」的可打印 A4 PDF。适用于把长文档、培训材料、会议资料、政策文件、网页长文整理成 1–6 页速览版。产出矢量转曲 PDF，任何打印机都不会乱码；同时输出 Markdown 摘要便于二次编辑。当用户要求"总结成几页纸""压缩成一页 A4""做成可打印的速览/一页纸/摘要 PDF"时使用。
 license: MIT
-compatibility: 需要 Python 3.10+、ghostscript（gs）用于文字转曲，以及 weasyprint/pypdfium2/pypdf/Pillow 用于渲染与自检。macOS 上 weasyprint 必须经 a4env.prepare() 才能 import（须设 DYLD_FALLBACK_LIBRARY_PATH），直接调用应走 scripts/a4 入口。解析各格式另需 python-pptx、python-docx、openpyxl、beautifulsoup4、requests。PPTX 可选 slidep，缺失时回退 python-pptx。跑 scripts/a4 env 可一次性自检全部依赖。
+compatibility: 需要 Python 3.10+、ghostscript（gs）和中文字体（如 Noto Sans CJK）。Python 包见 requirements.txt。
 ---
 
 # summarize-to-a4
@@ -199,6 +199,8 @@ C 删除：<2–4 条>
 缺包用 `"$A4"` 对应的解释器装：先 `"$A4" env` 看最后一行打印的 `python:` 路径，再 `<那个路径> -m pip install <包>`。**不要往系统 python 装**。
 
 `gs` 缺失时 `topdf.py` 会降级输出未转曲版本并 warning——此时必须告知用户"这份打印可能乱码"。
+
+**缺中文字体**时不会报错，PDF 里的中文会静默变成豆腐块（空心方框），**`verify` 也查不出来**（转曲后只剩路径，看不出字形对不对）。所以 `render.py` 在渲染前会用 `fc-list :lang=zh` 主动查一次，缺字体就在返回的 `warnings` 里报「系统缺少中文字体」。看到这条就直接告诉用户装字体（Linux：`fonts-noto-cjk`），不要交出这份 PDF。
 
 **`weasyprint` 在 macOS 上必须先 `a4env.prepare()` 才能 import**（要设 `DYLD_FALLBACK_LIBRARY_PATH`）。裸 `import weasyprint` 一定失败，那不是缺包，别去 `pip install`。`scripts/a4` 已经把这一步包进去了，所以别绕开它直接调 `render.py`。
 

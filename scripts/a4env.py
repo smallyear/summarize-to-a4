@@ -57,3 +57,25 @@ def prepare() -> dict[str, str]:
 
     os.environ.update(env)
     return env
+
+
+def missing_cjk_font() -> bool:
+    """系统里有没有能显示中文的字体。
+
+    缺字体时 weasyprint 不会报错，中文会静默渲染成豆腐块（空心方框），
+    而 verify 也查不出来（转曲后只剩路径，看不出字形对不对）。
+    所以渲染前主动查一次 fontconfig：`fc-list :lang=zh` 为空即缺失。
+
+    fc-list 不可用时返回 False（不做判断），避免在极简环境里误报。
+    """
+    import subprocess
+
+    try:
+        r = subprocess.run(
+            ["fc-list", ":lang=zh"], capture_output=True, text=True, timeout=15
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    if r.returncode != 0:
+        return False
+    return not r.stdout.strip()

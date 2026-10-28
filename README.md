@@ -44,15 +44,21 @@ Pi / Claude Code / 其他实现了 Agent Skills 规范的宿主都能读。
 
 | 用途 | 需要 |
 |---|---|
+| 运行时 | **Python 3.10+** |
 | 渲染与自检 | `weasyprint`、`pypdfium2`、`pypdf`、`Pillow` |
 | 解析各格式 | `python-pptx`、`python-docx`、`openpyxl`、`beautifulsoup4`、`requests` |
 | 文字转曲 | `ghostscript`（`gs`）—— **必装**，否则打印可能乱码 |
+| 中文字体 | **必装**，如 `Noto Sans CJK`。缺失时中文静默变豆腐块，`verify` 查不出来；`render` 会报警告 |
 | 可选 | `slidep`（PPTX 结构化抽取，缺失时回退 `python-pptx`） |
 
 ```bash
 # macOS
 brew install ghostscript
 pip install -r requirements.txt
+
+# Debian/Ubuntu：系统包（含中文字体与 gs）
+apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+                   libcairo2 libgdk-pixbuf-2.0-0 fonts-noto-cjk ghostscript
 ```
 
 > `ghostscript` 是系统依赖（`gs` 命令），pip 装不了，必须单独装。

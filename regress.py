@@ -522,6 +522,45 @@ def t_fontconfig() -> None:
           -1 < i_cache < i_inc, f"cachedir@{i_cache} include@{i_inc}")
 
 
+# ---------------------------------------------------------------- 中文字体检测
+def t_cjk_font() -> None:
+    """缺中文字体时 render 必须告警。
+
+    weasyprint 缺字体不报错，中文静默变豆腐块；转曲后 verify 也查不出来。
+    所以渲染前用 fc-list 主动查。这里测三种情况：
+      1. 本机（通常有字体）→ 不该误报
+      2. fc-list 输出为空 → 必须报
+      3. fc-list 不存在 → 不判断，不能误报
+    """
+    code = (
+        "import sys;sys.path.insert(0,'" + str(SCRIPTS) + "')\n"
+        "import a4env;print(a4env.missing_cjk_font())\n"
+    )
+
+    # 1. 本机真实情况
+    r = subprocess.run([PY, "-c", code], capture_output=True, text=True)
+    real = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
+    check("字体·本机检测不误报", real in ("True", "False"), r.stdout[-120:] + r.stderr[-120:])
+
+    # 2/3. 用 PATH 里的假 fc-list 模拟
+    shim = WORK / "shim"
+    shim.mkdir(exist_ok=True)
+    fake = shim / "fc-list"
+    fake.write_text("#!/bin/sh\nexit 0\n")                        # 输出为空 = 无中文字体
+    fake.chmod(0o755)                                              # 必须可执行，否则走 OSError 降级路径
+    env = {**os.environ, "PATH": f"{shim}:{os.environ.get('PATH','')}"}
+    r = subprocess.run([PY, "-c", code], capture_output=True, text=True, env=env)
+    check("字体·fc-list 为空时报缺字体",
+          r.stdout.strip().endswith("True"), r.stdout[-120:] + r.stderr[-120:])
+
+    # 把 fc-list 整个藏掉：PATH 里只留假目录
+    env2 = {**os.environ, "PATH": str(shim / "only")}
+    (shim / "only").mkdir(exist_ok=True)
+    r = subprocess.run([PY, "-c", code], capture_output=True, text=True, env=env2)
+    check("字体·fc-list 不存在时不误报",
+          r.stdout.strip().endswith("False"), r.stdout[-120:] + r.stderr[-120:])
+
+
 # ---------------------------------------------------------------- 13 临时目录
 def t_tmpdirs() -> None:
     before = set(Path(tempfile.gettempdir()).glob("a4pdf-*"))
@@ -552,7 +591,7 @@ def main() -> int:
         t_tables, t_escape, t_multi_h1, t_blocks, t_notes, t_encoding,
         t_html_extract, t_pptx, t_docx, t_xlsx_header, t_pdf_annot,
         t_verify, t_tiers, t_guards,
-        t_fontconfig, t_tmpdirs, t_entry,
+        t_fontconfig, t_cjk_font, t_tmpdirs, t_entry,
     ):
         try:
             fn()
