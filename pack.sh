@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 # 把 summarize-to-a4 打包成 workbuddy 可上传的两级目录结构。
 #
-# workbuddy 只接受「根目录/二级目录/文件」两级，而本仓库里有
-# .github/workflows/、.workbuddy/memory/、__pycache__/ 这些三级嵌套，
-# 直接上传会被拒。本脚本只挑 skill 运行时需要的文件，生成干净包。
+# 两件事：
+# 1. workbuddy 只接受「根目录/二级目录/文件」两级，而仓库里有
+#    .github/workflows/、.workbuddy/memory/、__pycache__/ 三级嵌套，
+#    直接上传会被拒。本脚本只挑 skill 运行时需要的文件。
+# 2. workbuddy 上传还要求 SKILL.md frontmatter 里有 version / display_name /
+#    display_name_en / description_zh / description_en 这些展示字段，
+#    但它们不是 Agent Skills 规范字段（skills-ref 会报 Unexpected fields）。
+#    所以源 SKILL.md 保持规范纯净，打包时才注入这些字段。
 #
 # 用法:
 #   ./pack.sh              打包到 ./dist/
@@ -25,9 +30,42 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR/references" "$OUT_DIR/scripts"
 
 # 根目录文件（regress.py 与 requirements.txt 保留，方便别人复跑测试、装依赖）
-for f in SKILL.md README.md LICENSE requirements.txt regress.py; do
+for f in README.md LICENSE requirements.txt regress.py; do
   [ -f "$f" ] && cp "$f" "$OUT_DIR/"
 done
+
+# SKILL.md 单独处理：注入 workbuddy 展示字段
+python3 - "$SKILL_DIR/SKILL.md" "$OUT_DIR/SKILL.md" <<'PY'
+import re, sys
+
+src, dst = sys.argv[1], sys.argv[2]
+text = open(src, encoding="utf-8").read()
+m = re.match(r"^---\n(.*?)\n---\n(.*)$", text, re.S)
+if not m:
+    sys.exit("SKILL.md 的 frontmatter 格式不对")
+fm, body = m.group(1), m.group(2)
+
+def get(key):
+    mm = re.search(rf"^{key}:\s*(.*)$", fm, re.M)
+    return mm.group(1).strip() if mm else ""
+
+name, desc = get("name"), get("description")
+license_, compat = get("license"), get("compatibility")
+
+front = f"""---
+name: {name}
+version: "1.0.0"
+display_name: "A4 速览"
+display_name_en: "Summarize to A4"
+description: {desc}
+description_zh: 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压成尽量少纸张的可打印 A4 速览。文字转曲任何打印机不乱码，10 档字号自动适配页数，条目型内容可用双栏省一半纸。
+description_en: "Compress any source (text, web, PPTX, DOCX, PDF, XLSX, CSV) into a printable A4 PDF with as few pages as possible. Vector-outlined output never garbles on any printer; 10 font tiers auto-fit the page count; two-column layout halves paper for list-style content."
+license: {license_}
+compatibility: {compat}
+---
+"""
+open(dst, "w", encoding="utf-8").write(front + body)
+PY
 
 # 二级目录
 cp references/density-rules.md references/layout-spec.md "$OUT_DIR/references/" 2>/dev/null || true
