@@ -1,5 +1,8 @@
 # summarize-to-a4
 
+[![CI](https://github.com/smallyear/summarize-to-a4/actions/workflows/ci.yml/badge.svg)](https://github.com/smallyear/summarize-to-a4/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
+
 > 让 A4 纸变成你的第 X 块屏幕。
 
 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压成「尽量少纸张」的可打印 A4 PDF。
@@ -157,4 +160,6 @@ requirements.txt            Python 依赖
 
 ## License
 
-MIT
+[MIT](LICENSE) © 2026 smallyear
+
+使用到的第三方组件（weasyprint、ghostscript、pypdfium2 等）按各自许可分发，本仓库未内嵌其代码。

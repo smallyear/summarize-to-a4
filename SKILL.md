@@ -1,7 +1,7 @@
 ---
 name: summarize-to-a4
 description: 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压缩成「尽量少纸张」的可打印 A4 PDF。适用于把长文档、培训材料、会议资料、政策文件、网页长文整理成 1–6 页速览版。产出矢量转曲 PDF，任何打印机都不会乱码；同时输出 Markdown 摘要便于二次编辑。当用户要求"总结成几页纸""压缩成一页 A4""做成可打印的速览/一页纸/摘要 PDF"时使用。
-license: MIT
+license: MIT. 完整条款见 LICENSE。
 compatibility: 需要 Python 3.10+、ghostscript（gs）和中文字体（如 Noto Sans CJK）。Python 包见 requirements.txt。
 ---
 
