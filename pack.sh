@@ -55,7 +55,7 @@ license_, compat = get("license"), get("compatibility")
 front = f"""---
 name: {name}
 version: "1.0.0"
-display_name: "A4 速览"
+display_name: "一纸通览"
 display_name_en: "Summarize to A4"
 description: {desc}
 description_zh: 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压成尽量少纸张的可打印 A4 速览。文字转曲任何打印机不乱码，10 档字号自动适配页数，条目型内容可用双栏省一半纸。
