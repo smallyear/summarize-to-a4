@@ -3,7 +3,7 @@
 [![CI](https://github.com/smallyear/summarize-to-a4/actions/workflows/ci.yml/badge.svg)](https://github.com/smallyear/summarize-to-a4/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE)
 
-> 让 A4 纸变成你的第 X 块屏幕。
+> 让 A4 纸变成你的第 N 块屏幕。
 
 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压成「尽量少纸张」的可打印 A4 PDF。
 

@@ -7,7 +7,7 @@ compatibility: 需要 Python 3.10+、ghostscript（gs）和中文字体（如 No
 
 # summarize-to-a4
 
-> 让 A4 纸变成你的第 X 块屏幕。
+> 让 A4 纸变成你的第 N 块屏幕。
 
 把任意来源压成「尽量少纸张」的可打印 A4 PDF。
 
