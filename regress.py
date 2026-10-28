@@ -476,6 +476,113 @@ def t_verify() -> None:
     check("verify·无 thumb 时只渲染末页", rendered == 1, f"渲染了 {rendered} 页\n{r.stdout[-200:]}{r.stderr[-200:]}")
 
 
+
+# ---------------------------------------------------------------- 分栏
+def t_columns() -> None:
+    """分栏：几何、自动判据、字号让位、语义分栏。"""
+
+    def col_probe(md_text: str, columns: int) -> tuple:
+        """用 PY 子进程渲染，返回 (左栏x集合, 右栏x集合)。"""
+        md = WORK / f"colprobe_{columns}.md"
+        md.write_text(md_text, encoding="utf-8")
+        code = (
+            "import sys,json\n"
+            "sys.path.insert(0,'" + str(SCRIPTS) + "')\n"
+            "import a4env;a4env.prepare()\n"
+            "import weasyprint, render\n"
+            "md=open(sys.argv[1],encoding='utf-8').read()\n"
+            "body,_=render.to_html(md)\n"
+            "html=render.build_page(body,'T','','',(9.8,1.6,4.2),columns=int(sys.argv[2]))\n"
+            "doc=weasyprint.HTML(string=html).render()\n"
+            "xs=[]\n"
+            "def walk(b):\n"
+            "    for c in getattr(b,'children',[]) or []:\n"
+            "        if type(c).__name__=='TextBox': xs.append(round(c.position_x))\n"
+            "        walk(c)\n"
+            "for pg in doc.pages: walk(pg._page_box)\n"
+            "print(json.dumps([sorted({x for x in xs if x<290}), sorted({x for x in xs if x>=290})]))\n"
+        )
+        r = subprocess.run([PY, "-c", code, str(md), str(columns)],
+                           capture_output=True, text=True)
+        try:
+            left, right = json.loads(r.stdout.strip().splitlines()[-1])
+        except Exception:  # noqa: BLE001
+            return [], []
+        return left, right
+
+    items_txt = "# T\n\n" + "\n".join(
+        f"- 第{i}条：二十字左右的短条目内容。" for i in range(60)) + "\n"
+    left, right = col_probe(items_txt, 2)
+    check("分栏·--columns 2 真的产生两栏", bool(left) and bool(right), f"L={left[:2]} R={right[:2]}")
+    left1, right1 = col_probe(items_txt, 1)
+    check("分栏·默认单栏不产生右栏", bool(left1) and not right1, f"L={left1[:2]} R={right1[:2]}")
+
+    # 字号让位用例要用「明显超过 12.6pt 栏宽容量(约 21 字)」的条目
+    long_items = "# T\n\n" + "\n".join(
+        f"- 第{i}条：这是三十字左右的一条条目内容用于测试字号让位逻辑。" for i in range(60)) + "\n"
+
+    item_md = w("c_items.md", items_txt)
+    d, _ = run("render", str(item_md), "-o", str(WORK / "c1.html"),
+               "--target-pages", "1", "--auto-columns")
+    check("分栏·条目型自动选 2 栏", d["columns"] == 2, str(d["columns"]))
+
+    prose_para = "这一段落是连续叙事的长句，单栏时每行基本填满，双栏只会把同样的文字切成两倍行数。" * 6
+    prose_md = w("c_prose.md", "# T\n\n" + "\n\n".join([prose_para] * 6) + "\n")
+    d, _ = run("render", str(prose_md), "-o", str(WORK / "c2.html"),
+               "--target-pages", "9", "--auto-columns")
+    check("分栏·散文型自动选 1 栏", d["columns"] == 1, str(d["columns"]))
+
+    wide_md = w("c_wide.md", "# T\n\n| a | b | c | d | e |\n|---|---|---|---|---|\n"
+                + "".join(f"| 1 | 2 | 3 | 4 | {i} |\n" for i in range(20)))
+    d, _ = run("render", str(wide_md), "-o", str(WORK / "c3.html"),
+               "--target-pages", "9", "--auto-columns")
+    check("分栏·宽表格自动选 1 栏", d["columns"] == 1, str(d["columns"]))
+
+    d, _ = run("render", str(wide_md), "-o", str(WORK / "c4.html"),
+               "--target-pages", "9", "--columns", "2")
+    check("分栏·宽表格给警告", any("列" in x for x in d["warnings"]), str(d["warnings"]))
+
+    long_md = w("c_long.md", long_items)
+    d, _ = run("render", str(long_md), "-o", str(WORK / "c5.html"),
+               "--target-pages", "1", "--columns", "2")
+    first = d["trail"][0]
+    check("分栏·字号让位给「一行放得下」",
+          first.get("wrap_extra", 0) > 0 and d["font_pt"] < first["font_pt"],
+          f"选中 {d['font_pt']}pt；{first['font_pt']}pt 时多折 {first.get('wrap_extra')} 行")
+
+    sec_md = "# T\n\n" + "\n\n".join(
+        f"## {n}、小节 {n}\n\n" + "\n".join(f"- 条目{i}：二十字左右。" for i in range(8))
+        for n in range(1, 7)) + "\n"
+    p6 = w("c_sec.md", sec_md)
+    d, _ = run("render", str(p6), "-o", str(WORK / "c6.html"),
+               "--target-pages", "1", "--columns", "2", "--pack-sections")
+    check("分栏·语义分栏生效", d.get("packed_pages", 0) >= 1, str(d.get("packed_pages")))
+    check("分栏·语义分栏不多花页", d["pages"] == 1, str(d["pages"]))
+
+    # 自洽性：render 声称的页数，必须等于真正生成 PDF 的页数。
+    # 曾经因为 solve() 内部用的 span 与输出时重算的 span 不一致，
+    # 出现「render 说 1 页、实际 2 页」，只有 verify 才会发现。这里直接卡死。
+    def pdf_pages(path) -> int:
+        r = subprocess.run(
+            [PY, "-c", "import sys,pypdf;print(len(pypdf.PdfReader(sys.argv[1]).pages))", str(path)],
+            capture_output=True, text=True)
+        return int(r.stdout.strip()) if r.returncode == 0 else -1
+
+    for label, md_path, extra in (
+        ("分栏+语义", p6, ["--columns", "2", "--pack-sections"]),
+        ("自动分栏", item_md, ["--auto-columns"]),
+        ("单栏", item_md, ["--columns", "1"]),
+    ):
+        out_html = WORK / f"consist_{label}.html"
+        pdf = WORK / f"consist_{label}.pdf"
+        d2, _ = run("render", str(md_path), "-o", str(out_html),
+                    "--target-pages", "9", "--title", "T", *extra)
+        run("topdf", str(out_html), "-o", str(pdf))
+        actual = pdf_pages(pdf)
+        check(f"自洽·{label} 声称页数==实际页数",
+              d2["pages"] == actual, f"声称 {d2['pages']}，实际 {actual}")
+
+
 # ---------------------------------------------------------------- 10 字号档
 def t_tiers() -> None:
     p = w("short.md", "## 节\n\n一句话。\n")
@@ -590,7 +697,7 @@ def main() -> int:
     for fn in (
         t_tables, t_escape, t_multi_h1, t_blocks, t_notes, t_encoding,
         t_html_extract, t_pptx, t_docx, t_xlsx_header, t_pdf_annot,
-        t_verify, t_tiers, t_guards,
+        t_verify, t_columns, t_tiers, t_guards,
         t_fontconfig, t_cjk_font, t_tmpdirs, t_entry,
     ):
         try:
