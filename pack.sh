@@ -81,6 +81,25 @@ if [ -n "$bad" ]; then
   exit 1
 fi
 
+# 生成同名 zip（zip 内不含外层目录，解压后 SKILL.md 就在根；用 Python 跨平台，不依赖系统 zip）
+ZIP_FILE="${OUT_DIR%/}.zip"
+rm -f "$ZIP_FILE"
+python3 - "$OUT_DIR" "$ZIP_FILE" <<'PY'
+import os, sys, zipfile
+
+src, dst = sys.argv[1], sys.argv[2]
+SKIP_FILES = {".DS_Store"}
+with zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk(src):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for f in files:
+            if f in SKIP_FILES:
+                continue
+            p = os.path.join(root, f)
+            z.write(p, os.path.relpath(p, src))
+print(f"  zip: {dst} ({os.path.getsize(dst)} bytes)")
+PY
+
 echo "✅ 打包完成: $OUT_DIR"
 echo
 echo "文件清单:"
