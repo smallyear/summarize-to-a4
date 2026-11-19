@@ -671,10 +671,23 @@ def main() -> int:
                 scored.append((n, waste, -tier[0], tier))
 
         if scored:
-            floor = READABLE_FLOOR if cols > 1 else 0.0
-            scored.sort(key=lambda x: (x[0], 0 if x[3][0] >= floor else 1, x[1], x[2]))
+            # 排序键的先后顺序就是「好读 > 少纸」的优先级：
+            #
+            #   1. 先要可读（字号不低于下限），别为省一页把字缩到看不清；
+            #   2. 再看折行浪费：双栏下「一条占一行」比字大 0.7pt 更值钱，
+            #      所以 waste 排在字号之前，单栏下它恒为 0，不影响；
+            #   3. 然后字号越大越好；
+            #   4. 页数只当平局裁判。
+            #
+            # 曾经把 pages 放在第一位，结果是「目标 4 页却给 3 页」：
+            # --target-pages 已经是「少纸」的决定了，字号只需要把预算用满；
+            # 再多挤一页会把字缩到 8.4pt，那是拿可读性换一页纸，本末倒置。
+            # 真想省纸就显式降 --target-pages，让它降一档字号。
+            floor = READABLE_FLOOR
+            scored.sort(key=lambda x: (0 if x[3][0] >= floor else 1, x[1], -x[3][0], x[0]))
             n_best, _, _, tier = scored[0]
         else:
+            # 一个档都塞不进目标：这时候没得选，只能取页数最少的那个（溢出）。
             b = min(trail, key=lambda t: (t["pages"], t["wrap_extra"], -t["font_pt"]))
             tier = next(t for t in TIERS if t[0] == b["font_pt"])
             n_best = b["pages"]
@@ -724,12 +737,21 @@ def main() -> int:
                 warn += column_warnings(body, c)
         else:
             one, two = solve(1), solve(2)
-            # 单栏是默认阅读体验，双栏必须赢得明显才换：
-            #   页数更少，或 页数相同但字号至少大 1.5pt（跨两档）。
-            # 否则会出现「散文在双栏里字号只大 0.7pt 就改成双栏」这种亏本买卖。
-            if two["pages"] < one["pages"]:
+            # 单栏是默认阅读体验，双栏必须赢得明显才换。
+            # 判据也按「好读 > 少纸」：
+            #   · 单栏已经溢出、双栏没有 → 必须换（否则交付不合格）；
+            #   · 双栏字号大 1.5pt 以上 → 换（跨两档才值得换阅读形式）；
+            #   · 字号不低于单栏且页数更少 → 换（同可读性下更省纸，双赢）；
+            #   · 其余一律留单栏。曾经把「页数更少」当第一判据，会选出
+            #     「单栏 11.1pt / 4 页 vs 双栏 8.4pt / 2 页」然后选了双栏，
+            #     那是拿可读性换纸。
+            one_bad = one["pages"] > args.target_pages
+            two_bad = two["pages"] > args.target_pages
+            if one_bad and not two_bad:
                 plan = two
-            elif two["pages"] == one["pages"] and two["tier"][0] >= one["tier"][0] + 1.5:
+            elif two["tier"][0] >= one["tier"][0] + 1.5:
+                plan = two
+            elif two["tier"][0] >= one["tier"][0] and two["pages"] < one["pages"]:
                 plan = two
             else:
                 plan = one
