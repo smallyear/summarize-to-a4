@@ -21,7 +21,10 @@ cd "$SKILL_DIR"
 
 # 必需文件缺失检查
 for f in SKILL.md scripts/a4 scripts/render.py scripts/topdf.py \
-         scripts/verify.py scripts/extract.py scripts/a4env.py; do
+         scripts/verify.py scripts/extract.py scripts/a4env.py \
+         scripts/facts.py scripts/cover.py \
+         references/density-rules.md references/layout-spec.md \
+         references/consistency-check.md; do
   [ -f "$f" ] || { echo "错误：缺少 $f" >&2; exit 1; }
 done
 
@@ -54,12 +57,12 @@ license_, compat = get("license"), get("compatibility")
 
 front = f"""---
 name: {name}
-version: "1.0.0"
+version: "1.1.0"
 display_name: "一纸通览"
 display_name_en: "Summarize to A4"
 description: {desc}
-description_zh: 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压成尽量少纸张的可打印 A4 速览。文字转曲任何打印机不乱码，10 档字号自动适配页数，条目型内容可用双栏省一半纸。
-description_en: "Compress any source (text, web, PPTX, DOCX, PDF, XLSX, CSV) into a printable A4 PDF with as few pages as possible. Vector-outlined output never garbles on any printer; 10 font tiers auto-fit the page count; two-column layout halves paper for list-style content."
+description_zh: 把任意来源（文本、网页、PPTX、DOCX、PDF、XLSX、CSV）压成尽量少纸张的可打印 A4 速览。文字转曲任何打印机不乱码，10 档字号自动适配页数，单栏双栏实测择优。原文前后矛盾另出疑点清单、绝不擅自改数，并可反查摘要漏了原文哪些日期与数字。
+description_en: "Compress any source (text, web, PPTX, DOCX, PDF, XLSX, CSV) into a printable A4 PDF with as few pages as possible. Vector-outlined output never garbles on any printer; 10 font tiers auto-fit the page count; single vs. two-column is measured, not guessed. Contradictions in the source get an errata sheet instead of a silent fix, and a coverage check reports which dates and figures the summary dropped."
 license: {license_}
 compatibility: {compat}
 ---
@@ -68,9 +71,11 @@ open(dst, "w", encoding="utf-8").write(front + body)
 PY
 
 # 二级目录
-cp references/density-rules.md references/layout-spec.md "$OUT_DIR/references/" 2>/dev/null || true
+cp references/density-rules.md references/layout-spec.md \
+   references/consistency-check.md "$OUT_DIR/references/"
 cp scripts/a4 scripts/a4env.py scripts/extract.py scripts/render.py \
-   scripts/topdf.py scripts/verify.py "$OUT_DIR/scripts/"
+   scripts/topdf.py scripts/verify.py scripts/facts.py scripts/cover.py \
+   "$OUT_DIR/scripts/"
 chmod +x "$OUT_DIR/scripts/a4"
 
 # 验证：不允许出现三级目录（find -mindepth 2 找到的就是三级目录）
