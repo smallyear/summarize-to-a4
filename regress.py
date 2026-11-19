@@ -680,6 +680,63 @@ def t_tmpdirs() -> None:
 
 
 # ---------------------------------------------------------------- 14 入口脚本
+# ---------------------------------------------------------------- 事实清单
+def t_facts() -> None:
+    src = w("facts.source.md", """## 第 1 页：概述
+
+本项目总投入 1,200 万元，预算 320万元，计划在 2024 年 3 月开工。
+中文数字三百万不应被抽到。
+
+## 第 4 页：财务
+
+预算追加至 360万元，交付期 18 个月，验收在 2025年6月30日 完成。
+
+## 第 21 页：结论
+
+综上，总投入 320 万元。
+""")
+    out = WORK / "facts.md"
+    data, rc = run("facts", str(src), "-o", str(out))
+    check("facts·退出码 0", rc == 0, str(data))
+    check("facts·能跑通", bool(data.get("ok")), str(data))
+    text = out.read_text(encoding="utf-8") if out.exists() else ""
+
+    # 后缀合并：源文里「本项目总投入」与「综上，总投入」会被切成两个键，
+    # 不合并就漏掉最典型的矛盾
+    section = text.split("## 二、")[0]
+    check("facts·同名不同值聚出 总投入", "总投入" in section, section[:300])
+    check("facts·同名不同值聚出 预算", "预算" in section and "360万元" in section,
+          section[:300])
+    check("facts·同名不同值计数为 4", data.get("same_name_diff_value") == 4,
+          str(data.get("same_name_diff_value")))
+
+    check("facts·千分位归一化", "1200 万" in text, "")
+    # 表尾说明里本来就有「三百万」这个示例词，只断言它没被当成事实抽进表格
+    check("facts·中文数字不抽",
+          not any(ln.startswith("| ") and "三百万" in ln for ln in text.splitlines()), "")
+    check("facts·日期抽全", data.get("dates") == 2, str(data.get("dates")))
+    check("facts·日期含 Y年M月 半截形态", "2024 年 3 月" in text, "")
+
+    rows = [ln for ln in section.splitlines() if ln.startswith("| ") and "---" not in ln]
+    check("facts·表头 + 4 行", len(rows) == 5, f"{len(rows)} 行: {rows[:3]}")
+
+    out2 = WORK / "facts_cap.md"
+    data2, _ = run("facts", str(src), "-o", str(out2), "--max-rows", "1")
+    cap = [ln for ln in out2.read_text(encoding="utf-8").split("## 二、")[0].splitlines()
+           if ln.startswith("| ") and "---" not in ln]
+    check("facts·--max-rows 生效", len(cap) == 2, f"{len(cap)} 行")
+
+    empty = w("facts_empty.md", "")
+    out3 = WORK / "facts_empty.out.md"
+    data3, rc3 = run("facts", str(empty), "-o", str(out3))
+    check("facts·空源不崩", rc3 == 0 and data3.get("ok") and data3.get("mentions") == 0,
+          str(data3))
+
+    missing, rc4 = run("facts", str(WORK / "nope.md"), "-o", str(WORK / "x.md"),
+                       expect_fail=True)
+    check("facts·源不存在报错", rc4 != 0 and missing.get("ok") is False, str(missing))
+
+
 def t_entry() -> None:
     a4 = SCRIPTS / "a4"
     if not a4.exists():
@@ -698,7 +755,7 @@ def main() -> int:
         t_tables, t_escape, t_multi_h1, t_blocks, t_notes, t_encoding,
         t_html_extract, t_pptx, t_docx, t_xlsx_header, t_pdf_annot,
         t_verify, t_columns, t_tiers, t_guards,
-        t_fontconfig, t_cjk_font, t_tmpdirs, t_entry,
+        t_fontconfig, t_cjk_font, t_tmpdirs, t_facts, t_entry,
     ):
         try:
             fn()
