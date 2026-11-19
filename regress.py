@@ -334,6 +334,52 @@ def t_pptx() -> None:
     check("PPTX·备注前缀不叠加", "备注：备注：" not in text, text)
 
 
+# ---------------------------------------------------------------- 图片即正文
+def t_pptx_images() -> None:
+    """正文在截图里时必须报警。
+
+    两个解析器都只抽文字层。一份 43 页的标注规范里 31 页正文在截图中，
+    每页还剩标题和几行标签，于是「总字数不足 100」和「整页无文字」两条
+    现有判据全部失效——抽取看起来一切正常，实际上真正要标注的示例措辞
+    一句都没进来。
+    """
+    try:
+        from pptx import Presentation
+        from pptx.util import Inches
+    except ImportError:
+        check("PPTX·图片密集给警告（缺 python-pptx，跳过）", True, "skip")
+        return
+    import base64
+
+    png = WORK / "dot.png"
+    png.write_bytes(base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHw"
+        "AFAAH/q842iQAAAABJRU5ErkJggg=="))
+
+    prs = Presentation()
+    for i in range(6):
+        s = prs.slides.add_slide(prs.slide_layouts[5])
+        s.shapes.title.text = f"第 {i + 1} 页：示例"
+        s.shapes.add_picture(str(png), Inches(1), Inches(2), Inches(1), Inches(1))
+    img_deck = WORK / "img.pptx"
+    prs.save(str(img_deck))
+    d, _ = run("extract", str(img_deck), "-o", str(WORK / "img.md"))
+    check("PPTX·正文在截图里时报警",
+          any("截图" in w for w in d.get("warnings", [])), str(d.get("warnings")))
+
+    prs = Presentation()
+    for i in range(6):
+        s = prs.slides.add_slide(prs.slide_layouts[5])
+        s.shapes.title.text = f"第 {i + 1} 页"
+        tb = s.shapes.add_textbox(Inches(0.5), Inches(2), Inches(8), Inches(4))
+        tb.text_frame.text = "这是一段足够长的正文，用来撑起文字层。" * 24
+    txt_deck = WORK / "txt.pptx"
+    prs.save(str(txt_deck))
+    d2, _ = run("extract", str(txt_deck), "-o", str(WORK / "txt.md"))
+    check("PPTX·纯文字不误报",
+          not any("截图" in w for w in d2.get("warnings", [])), str(d2.get("warnings")))
+
+
 # ---------------------------------------------------------------- 8b docx 内容控件
 def t_docx() -> None:
     try:
@@ -831,7 +877,7 @@ def main() -> int:
     PY = pick_python()
     for fn in (
         t_tables, t_escape, t_multi_h1, t_blocks, t_notes, t_encoding,
-        t_html_extract, t_pptx, t_docx, t_xlsx_header, t_pdf_annot,
+        t_html_extract, t_pptx, t_pptx_images, t_docx, t_xlsx_header, t_pdf_annot,
         t_verify, t_columns, t_tiers, t_guards,
         t_fontconfig, t_cjk_font, t_tmpdirs, t_tier_pick, t_facts, t_entry,
     ):

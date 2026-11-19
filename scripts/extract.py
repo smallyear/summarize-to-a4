@@ -184,9 +184,53 @@ def note_line(text: str) -> str:
 
 
 # ---------------------------------------------------------------- readers
+# 判据 1：多数页含图片，且平均每页文字很薄 -> 正文大概率在截图/图片里
+TEXT_IN_IMAGE_AVG_CHARS = 400
+# 判据 2：单页文字少到只剩标题、又有图片 -> 这页基本只有图
+TEXT_IN_IMAGE_PAGE_CHARS = 80
+TEXT_IN_IMAGE_MIN_PAGES = 3
+
+
+def pptx_image_stats(path: Path) -> tuple[int, int, int, int]:
+    """返回 (含图页数, 文字极少的含图页数, 总页数, 文字层总字数)。
+
+    为什么要单独扫一遍 XML：两个解析器都只抽文字层，抽不到图片里的正文。
+    一份 43 页的标注规范里 31 页正文在截图中，每页只剩标题和几行标签，
+    于是现有两条判据全部失效——总字数 12,642 远超「不足 100 字」，也没有
+    整页空白去触发「无可抽取文字」。抽取结果看起来一切正常，用户会以为
+    摘要覆盖了全部内容，而真正要标注的示例措辞一句都没进来。
+    """
+    try:
+        with zipfile.ZipFile(path) as z:
+            names = [n for n in z.namelist() if re.match(r"ppt/slides/slide\d+\.xml$", n)]
+            with_pic = sparse = chars = 0
+            for name in names:
+                xml = z.read(name).decode("utf-8", "ignore")
+                text = re.sub(r"<[^>]+>", "", xml).strip()
+                chars += len(text)
+                if "<p:pic>" in xml:
+                    with_pic += 1
+                    if len(text) < TEXT_IN_IMAGE_PAGE_CHARS:
+                        sparse += 1
+            return with_pic, sparse, len(names), chars
+    except Exception:  # noqa: BLE001  扫不动就不报，别让诊断代码拖垮主流程
+        return 0, 0, 0, 0
+
+
 def from_pptx(path: Path):
     """优先用 slidep（结构化、带表格与坐标），失败回退 python-pptx。"""
     warnings = []
+    with_pic, sparse, total, chars = pptx_image_stats(path)
+    mostly_images = (
+        total and with_pic >= max(TEXT_IN_IMAGE_MIN_PAGES, total * 0.5)
+        and chars / total < TEXT_IN_IMAGE_AVG_CHARS
+    )
+    if mostly_images or sparse >= TEXT_IN_IMAGE_MIN_PAGES:
+        avg = round(chars / total) if total else 0
+        warnings.append(
+            f"{with_pic}/{total} 页含图片，文字层平均每页仅 {avg} 字，正文很可能在截图里；"
+            "截图内的文字未能抽取，示例与措辞可能不全，需要时改用多模态读图"
+        )
     out_dir = tempfile.mkdtemp(prefix="slidep-")
     try:
         r = subprocess.run(
