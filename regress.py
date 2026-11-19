@@ -680,6 +680,45 @@ def t_tmpdirs() -> None:
 
 
 # ---------------------------------------------------------------- 14 入口脚本
+# ---------------------------------------------------------------- 选档优先级
+def t_tier_pick() -> None:
+    """目标页数内的选档必须「好读 > 少纸」。
+
+    这份 fixture 是关键证据：12.6pt 要 2 页、10.4pt 只要 1 页。
+    曾经把 pages 放在排序第一位，于是「--target-pages 2」会给你 10.4pt / 1 页，
+    等于拿可读性换一页纸。--target-pages 本身已经是「少纸」的决定，
+    字号只负责把预算用满。
+    """
+    body = ""
+    for i in range(1, 9):
+        body += f"## 第 {i} 节\n\n"
+        for j in range(3):
+            body += (f"某字段 {i * 100 + j} 万元，占 {i}.{j}%，"
+                     f"较上年增长 {i} 个百分点，主要系订单结构变化所致。\n\n")
+    p = w("tierpick.md", body)
+    d, _ = run("render", str(p), "-o", str(WORK / "tierpick.html"), "--target-pages", "2")
+    trail = d["trail"]
+    check("选档·fixture 确实跨了页数档",
+          any(t["pages"] < d["pages"] for t in trail),
+          f"选定 {d['font_pt']}pt/{d['pages']}页；trail={[(t['font_pt'], t['pages']) for t in trail]}")
+
+    fit = [t for t in trail if t["pages"] <= 2]
+    check("选档·在目标页数内取最大字号",
+          bool(fit) and d["font_pt"] == max(t["font_pt"] for t in fit),
+          f"选定 {d['font_pt']}pt；可选 {[t['font_pt'] for t in fit]}")
+
+    check("选档·不为少一页而牺牲字号",
+          all(t["font_pt"] < d["font_pt"] for t in trail if t["pages"] < d["pages"]),
+          f"选定 {d['font_pt']}pt/{d['pages']}页；"
+          f"更少页的档={[(t['font_pt'], t['pages']) for t in trail if t['pages'] < d['pages']]}")
+
+    # 显式降页数才是省纸的动作，且必须真的降一档字号
+    d2, _ = run("render", str(p), "-o", str(WORK / "tierpick1.html"), "--target-pages", "1")
+    check("选档·降目标页数才缩字号",
+          d2["pages"] == 1 and d2["font_pt"] < d["font_pt"],
+          f"1 页时 {d2['font_pt']}pt；2 页时 {d['font_pt']}pt")
+
+
 # ---------------------------------------------------------------- 事实清单
 def t_facts() -> None:
     src = w("facts.source.md", """## 第 1 页：概述
@@ -755,7 +794,7 @@ def main() -> int:
         t_tables, t_escape, t_multi_h1, t_blocks, t_notes, t_encoding,
         t_html_extract, t_pptx, t_docx, t_xlsx_header, t_pdf_annot,
         t_verify, t_columns, t_tiers, t_guards,
-        t_fontconfig, t_cjk_font, t_tmpdirs, t_facts, t_entry,
+        t_fontconfig, t_cjk_font, t_tmpdirs, t_tier_pick, t_facts, t_entry,
     ):
         try:
             fn()
