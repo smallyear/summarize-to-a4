@@ -11,6 +11,9 @@ dist/
 venv/
 env/
 
+# pack.sh 的产物：dist/ 目录与同名 zip 都是构建件，不进仓库
+dist.zip
+
 # ---- 本地工具运行产物 ----
 # slidep（PPTX 结构化抽取）会在 cwd 写日志，含本机绝对路径与端口，不要提交
 .slidep/
