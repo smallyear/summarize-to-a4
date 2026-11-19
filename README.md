@@ -229,6 +229,7 @@ scripts/topdf.py            HTML -> PDF（ghostscript 转曲）
 scripts/verify.py           自检 + 缩略图
 scripts/a4env.py            weasyprint 环境准备 + fontconfig 隔离
 references/layout-spec.md   版面规格、字号档位、分页铁律
+references/consistency-check.md 一致性核对手册：六类勾稽、错误形态、假阳性
 references/density-rules.md A/B/C 压缩规则、分格式策略
 regress.py                  回归测试
 requirements.txt            Python 依赖
