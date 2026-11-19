@@ -5,6 +5,10 @@
 为了「显得认真」编出矛盾。这里只做机械抽取，不做判断——是不是真矛盾
 留给模型按举证制确认（每条必须给两处页码+短引）。
 
+能力边界（别高估它）：能抓「指标名被逐字重复而值不同」，抓不到「同一件
+事换个说法」。110 页问询函实测：7 处 P0 里它只报出 1 处（周转率 0.70/0.47），
+其余靠人工勾稽。它的真实价值是当定位表——把几十页上的数字摆到一张纸上。
+
 用法:
   a4 facts <source.md> -o <facts.md> [--max-rows 200]
 
@@ -28,6 +32,11 @@ UNIT = (
 MENTION_RE = re.compile(NUM + r"\s*" + UNIT)
 
 # 长的在前：先认 Y年M月D日，再退到 Y年M月、Y年，避免只抓到半截
+# 「应收账款周转率为 0.70」这种没有单位的指标值，MENTION_RE 抽不到——
+# 而本次实测的 7 处 P0 里，「周转率 0.70 vs 0.47」正是这一类。
+BARE_NUM = re.compile(r"(?<![\d.])\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\d.])\d+(?:\.\d+)?")
+RATIO_TAIL = ("率", "比率", "倍数", "系数")
+
 DATE_RES = [
     re.compile(r"\d{4}\s*[-/年.]\s*\d{1,2}\s*[-/月.]\s*\d{1,2}\s*日?"),
     re.compile(r"\d{4}\s*[-/年.]\s*\d{1,2}\s*月?"),
@@ -77,16 +86,58 @@ def strip_suffix(key: str) -> str:
     return key
 
 
+# 泛词：出现在数字左边的语法成分，不是指标名。
+# 不排除的后果很实测：110 页公告报出 184 行「同名不同值」，前几名是
+# 「比例」27 行、「应收账款余额」22 行、「确认营业收入」20 行——全是把整篇
+# 数字塌进一个桶，一条有用的都没有。真正的矛盾靠人工勾稽和浮点验算。
+GENERIC_KEYS = (
+    "比例", "占比", "比重", "余额", "金额", "收入", "营业收入", "费用", "成本",
+    "毛利", "毛利率", "净额", "总额", "小计", "合计", "共计", "同比", "环比",
+    "增长", "增加", "下降", "减少", "计提", "确认", "折算", "万元", "亿元", "元",
+    "以上", "以下", "其中", "其他", "本期", "上期", "期末", "期初", "当年",
+    "分别", "单位", "说明", "备注", "项目", "指标", "名称", "日期", "期间",
+    "此外", "同时", "本次", "上述", "目前", "亿元", "万元", "亿", "万",
+    "年", "月", "日", "期", "支付", "收取", "发生", "实现", "达到",
+    # 散文里的主谓残片：出现在数字左边纯属语序，不是指标名
+    "你公司", "公司", "截至", "截止", "获取", "签订", "如上表", "如下", "内付",
+    "价值", "年报", "报告期", "公告", "情况", "情形",
+)
+
+# 名称归一化：同一指标常被写成「占比/比重/比例」「应收账款余额/应收账款账面余额」，
+# 不归一就永远聚不到一起（实测漏掉了「3 年以上应收占比 61.17% vs 62.21%」这类）。
+KEY_NORMALIZE = (
+    ("账面余额", "余额"), ("期末余额", "余额"), ("期初余额", "余额"),
+    ("占比", "比例"), ("比重", "比例"), ("比率", "比例"),
+    ("账面价值", "价值"), ("账面", ""), ("期末", ""), ("期初", ""),
+    ("本期", ""), ("上期", ""), ("年末", ""), ("年度", ""),
+)
+
+
+def normalize_key(key: str) -> str:
+    for a, b in KEY_NORMALIZE:
+        key = key.replace(a, b)
+    return key
+
+
+def is_generic(key: str) -> bool:
+    if not key:
+        return True
+    return any(key == g or key.endswith(g) for g in GENERIC_KEYS)
+
+
 def left_key(text: str, start: int) -> str:
     """数字左侧最近的「名称」：取 14 字窗口里最后一串非标点片段。"""
     window = text[max(0, start - 14):start]
     parts = [p for p in PUNCT.split(window) if p]
     if not parts:
         return ""
-    key = strip_suffix(parts[-1])
+    key = normalize_key(strip_suffix(parts[-1]))
     if not key or any(ch.isdigit() for ch in key):
         return ""
-    return key[-6:]
+    key = key[-8:]
+    if len(key) < 2 or is_generic(key):   # 单字（多为公式里的 A/B/C）没有信息量
+        return ""
+    return key
 
 
 def sentence_of(line: str, start: int, width: int = 64) -> str:
@@ -104,9 +155,6 @@ def sentence_of(line: str, start: int, width: int = 64) -> str:
     pos = max(0, start - seg_start - width // 3)
     cut = seg[pos:pos + width]
     return ("…" if pos > 0 else "") + cut + ("…" if pos + width < len(seg) else "")
-
-
-GENERIC_KEYS = {"以上", "以下", "其中", "此外", "其他", "同时", "本次", "上述", "上述", "目前"}
 
 
 def merge_suffix_keys(raw: dict[str, list[dict]]) -> dict[str, list[dict]]:
@@ -208,6 +256,22 @@ def main() -> int:
                 "page": page, "sent": sentence_of(line, m.start()),
             })
 
+        # 裸比率：没带单位的指标值，只认「…率/倍数/系数 + 数字」这个形态
+        unit_spans = [m.span() for m in MENTION_RE.finditer(line)]
+        for m in BARE_NUM.finditer(line):
+            span = m.span()
+            if any(span[0] >= a and span[1] <= b for a, b in unit_spans):
+                continue
+            key = left_key(line, m.start())
+            if not key or not key.endswith(RATIO_TAIL):
+                continue
+            val = norm_value(m.group(0), "")
+            if val is None:
+                continue
+            mentions.append({"name": key, "value": val, "unit": "比率",
+                             "raw": m.group(0), "page": page,
+                             "sent": sentence_of(line, m.start())})
+
         taken: list[tuple[int, int]] = []
         for dr in DATE_RES:
             for dm in dr.finditer(line):
@@ -234,7 +298,9 @@ def main() -> int:
     conflicts = []
     for name, items in groups.items():
         vals = {round(i["value"], 6) for i in items}
-        if len(items) < 2 or len(vals) < 2:
+        if len(items) < 2 or not 2 <= len(vals) <= 3:
+            # 同一条目下出现 4 个以上不同值，多半是计提阶梯、名录或利率表
+            # 被并进了一个名称，不是矛盾。
             continue
         for i in items:
             conflicts.append([
@@ -252,18 +318,28 @@ def main() -> int:
     out.append("")
     out.append(f"> 源：`{src.name}` · {len(mentions)} 处数字 · {len(dates)} 个日期 · "
                f"仅抽阿拉伯数字，中文数字（三百万）不在其中。")
+    out.append("> 同一个数值写成 1.10 亿和 11,049.36 万属正常（单位混用），"
+               "不单列成「疑点」——实测那种配对 27 组里 0 组有用。")
     out.append("")
 
-    out.append("## 一、同名不同值（疑似矛盾，优先核对）")
+    out.append("## 一、同名多值（疑似矛盾，优先核对）")
     out.append("")
     if conflicts:
         out.extend(table(conflicts[:args.max_rows],
                          ["名称", "原文", "归一化", "位置", "上下文"]))
+        out.append("")
+        out.append("> 同一名称下只列 2–3 个不同值；出现 4 个以上多半是计提阶梯、"
+                   "利率表、客户名录被并进了一个名称，已丢弃。")
     else:
         out.append("未发现同一名称对应不同数值的直接冲突。")
+        out.append("")
+        out.append("> 这一节只能抓「指标名被逐字重复」的情形（如"
+                   "「应收账款周转率为 0.70 / 0.47」）。同一件事换一种说法"
+                   "（「占年度销售总额比例」vs「前五名收入占比」）抓不到，"
+                   "那部分仍要人工勾稽。")
     out.append("")
 
-    out.append("## 二、金额与百分比（按值排序）")
+    out.append("## 二、金额、百分比与比率值（按值排序）")
     out.append("")
     if money:
         out.extend(table(
