@@ -90,9 +90,9 @@ $A4 cover work/report.source.md work/report.outline.md -o work/report.cover.md
 $A4 render work/report.outline.md -o work/report.html \
     --target-pages 2 --title "季度经营报告" --subtitle "来源：report.pptx（32 页）"
 
-# 条目型速查（规则清单、核对项）可以开双栏，能省一半纸
+# 栏数默认实测择优；想强制双栏（并保证小节不跨栏）就这样写
 $A4 render work/rules.outline.md -o work/rules.html \
-    --target-pages 1 --auto-columns --pack-sections --title "..."
+    --target-pages 1 --columns 2 --pack-sections --title "..."
 
 $A4 topdf work/report.html -o work/report.pdf
 
@@ -167,8 +167,9 @@ $A4 verify work/report.pdf --target-pages 2 --thumb work/thumb.png
 | 表格 ≥ 5 列、格内长句 | **别用**，栏宽撑不下 |
 | 合同 / 法规原文 / 财务三表 | 本就该劝退 |
 
-不想自己判断就用 `--auto-columns`：它会把单栏和双栏**各算一遍**，按
-`字号 → 页数 → 偏好单栏` 挑更好的那个（双栏字号不赢 1.5pt 就不换栏）。不是猜，是实测。
+**默认就是实测**：不传 `--columns`，它会把「单栏」和「双栏＋语义分栏」**各算一遍**再选。
+判据顺序：单栏溢出→双栏；双栏字号大 1.5pt 以上→双栏；双栏省页且字号只让 ≤2pt→双栏；其余单栏。
+不是猜，是实测。想强制就传 `--columns 1|2|3`。
 
 字号档的选法同理：**在 `--target-pages` 上限内取最大的字号，不为少一页而缩字号**。
 `--target-pages` 才是「少纸」的旋钮，想更省纸就降它，让它降一档。
