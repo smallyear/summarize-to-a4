@@ -380,6 +380,55 @@ def t_pptx_images() -> None:
           not any("截图" in w for w in d2.get("warnings", [])), str(d2.get("warnings")))
 
 
+# ---------------------------------------------------------------- 覆盖比对
+def t_cover() -> None:
+    """覆盖比对只做能机械判的那两列（日期、数值），句子层给清单不判覆盖。
+
+    背景：一份 43 页标注规范，摘要漏掉了「上年报披露仍判 C」这条会改变分类
+    结果的规则，而 verify 报 issues 为空。这条漏必须能被工具照出来。
+    """
+    src = w("cover.source.md", """## 第 1 页
+
+截至 2025 年末应收账款余额 68,475.19 万元，占比 62.21%。
+Mr. Yeung 在 2024.1.1 被任命为董事，仅在上一年年报中披露，仍判 C。
+## 第 4 页
+
+单位：万元
+
+| 客户 | 余额 | 比例 |
+|---|---|---|
+| 客户 1 | 8,400.51 | 24.18% |
+""")
+    out = w("cover.outline.md", """## 应收
+
+| 账龄 | 余额（万元） |
+|---|---|
+| 合计 | 68,475.19 |
+
+> 应收账款占比 62.21%。
+""")
+    dst = WORK / "cover.report.md"
+    d, rc = run("cover", str(src), "-o", str(dst), str(out))
+    check("cover·退出码 0 且给统计", rc == 0 and d.get("ok") and "uncovered" in d, str(d))
+    text = dst.read_text(encoding="utf-8")
+    dates_sec = text.split("## 二、")[0]
+    nums_sec = text.split("## 二、")[1].split("## 三、")[0]
+
+    # 表格里单位写在表头（余额（万元）），单元格只有数字——摘要侧必须认出来，
+    # 否则 68,475.19 会被误报成未覆盖，整个工具就没人信了。
+    # 同理「客户 1」里的 1 不能被当成 1 万元。
+    check("cover·表头单位能被摘要侧识别", "68,475.19" not in nums_sec, nums_sec[:400])
+
+    # 真漏的那条必须报出来
+    check("cover·漏掉的日期被抓到", "2024.1.1" in dates_sec, dates_sec[:400])
+    check("cover·漏掉的数值被抓到", "8,400.51" in nums_sec, nums_sec[:400])
+
+    # 句子层不做 diff，只给清单
+    third = text.split("## 三、")[1]
+    check("cover·判据句给清单不判对错",
+          "逐条" in third and "未覆盖" not in third, third[:300])
+
+
 # ---------------------------------------------------------------- 8b docx 内容控件
 def t_docx() -> None:
     try:
@@ -879,7 +928,7 @@ def main() -> int:
         t_tables, t_escape, t_multi_h1, t_blocks, t_notes, t_encoding,
         t_html_extract, t_pptx, t_pptx_images, t_docx, t_xlsx_header, t_pdf_annot,
         t_verify, t_columns, t_tiers, t_guards,
-        t_fontconfig, t_cjk_font, t_tmpdirs, t_tier_pick, t_facts, t_entry,
+        t_fontconfig, t_cjk_font, t_tmpdirs, t_tier_pick, t_facts, t_cover, t_entry,
     ):
         try:
             fn()

@@ -83,6 +83,9 @@ $A4 facts work/report.source.md -o work/report.facts.md
 # 2. 写摘要（受限 Markdown，见下）
 #    -> work/report.outline.md
 
+# 2b. 自查覆盖：原文有、摘要没有的日期/数值，外加判据句清单
+$A4 cover work/report.source.md work/report.outline.md -o work/report.cover.md
+
 # 3. 出 PDF（自动选字号凑到目标页数）
 $A4 render work/report.outline.md -o work/report.html \
     --target-pages 2 --title "季度经营报告" --subtitle "来源：report.pptx（32 页）"
@@ -191,6 +194,7 @@ report.pdf          矢量转曲，0 字体对象，A4，打印即用
 report.outline.md   摘要源文件，可直接改
 report.errata.md    疑点清单（P0/P1，每条给两处原文定位；空则不出）
 report.facts.md     原子事实表，核对用（长文档才生成）
+report.cover.md     覆盖比对：漏掉的日期/数值 + 判据句清单
 report.source.md    原文中间态，改摘要不必重跑解析
 thumb.png           3 列缩略图，用来人眼质检版面
 ```
@@ -224,6 +228,7 @@ SKILL.md                    技能说明（Agent 读这个）
 scripts/a4                  统一入口：extract / facts / render / topdf / verify / env
 scripts/extract.py          任意格式 -> Markdown
 scripts/facts.py            原子事实抽取（数字/日期/口径/结论），核对矛盾用
+scripts/cover.py            覆盖比对：原文有、摘要没有的日期/数值 + 判据句清单
 scripts/render.py           Markdown -> A4 HTML（自动选字号）
 scripts/topdf.py            HTML -> PDF（ghostscript 转曲）
 scripts/verify.py           自检 + 缩略图
