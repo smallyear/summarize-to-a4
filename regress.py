@@ -759,6 +759,45 @@ def t_facts() -> None:
     rows = [ln for ln in section.splitlines() if ln.startswith("| ") and "---" not in ln]
     check("facts·表头 + 4 行", len(rows) == 5, f"{len(rows)} 行: {rows[:3]}")
 
+    # 降噪：泛词不当名称用，否则整篇数字塌进一个桶。
+    # 实测 110 页问询函回复：不降噪 184 行（前几名是「比例」27 行、
+    # 「应收账款余额」22 行），一条有用都没有。
+    noise = w("facts_noise.md", """## 第 1 页
+
+营业收入为 3.47 亿元，扣除后营业收入为 3.31 亿元。
+上年同期为 0.48 亿元，同比下降 121.71%。
+应付账款周转率为 2.10。
+## 第 2 页
+
+营业收入为 2.98 亿元。
+上年同期为 0.67 亿元。
+应付账款周转率为 1.85。
+""")
+    out_n = WORK / "facts_noise.out.md"
+    run("facts", str(noise), "-o", str(out_n), "--max-rows", "50")
+    text_n = out_n.read_text(encoding="utf-8")
+    section_n = text_n.split("## 二、")[0]
+    check("facts·泛词（营业收入/上年同期）不聚成疑点",
+          "营业收入" not in section_n and "上年同期" not in section_n,
+          section_n[:300])
+
+    # 裸比率：没带单位，但正是最容易被写错的一类。
+    # 「应收账款周转率 0.70 vs 0.47」是本次 110 页文档里真实存在的 P0。
+    check("facts·裸比率能抽出来并聚上",
+          "应付账款周转率" in section_n and "2.10" in section_n and "1.85" in section_n,
+          section_n[:300])
+
+    # 同一条目下 4 个以上不同值 → 阶梯/名录，不是矛盾
+    ladder = w("facts_ladder.md", """## 第 1 页
+
+1 年以内 5%、1-2 年 10%、2-3 年 20%、3-4 年 50%、4-5 年 50%。
+计提比例为 5%，计提比例为 10%，计提比例为 20%，计提比例为 50%。
+""")
+    out_l = WORK / "facts_ladder.out.md"
+    run("facts", str(ladder), "-o", str(out_l))
+    check("facts·同名称 4 个以上不同值被丢弃",
+          "计提比例" not in out_l.read_text(encoding="utf-8").split("## 二、")[0], "")
+
     out2 = WORK / "facts_cap.md"
     data2, _ = run("facts", str(src), "-o", str(out2), "--max-rows", "1")
     cap = [ln for ln in out2.read_text(encoding="utf-8").split("## 二、")[0].splitlines()
