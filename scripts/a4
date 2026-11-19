@@ -6,6 +6,7 @@
 #
 # 用法：
 #   a4 extract <输入> -o <out.md>
+#   a4 facts   <source.md> -o <facts.md>    抽原子事实供查前后矛盾
 #   a4 render  <outline.md> -o <out.html> --target-pages N [--title ...]
 #   a4 topdf   <out.html> -o <out.pdf>
 #   a4 verify  <out.pdf> [--target-pages N] [--thumb <thumb.png>]
@@ -39,7 +40,7 @@ cmd="${1:-}"
 [ $# -gt 0 ] && shift
 
 case "$cmd" in
-  extract|render|topdf|verify)
+  extract|facts|render|topdf|verify)
     exec "$PY" "$SCRIPTS/$cmd.py" "$@"
     ;;
   env)
@@ -76,6 +77,7 @@ EOF
 summarize-to-a4 入口
 
   a4 extract <输入> -o <out.md>                  解析任意格式为 Markdown
+  a4 facts   <source.md> -o <facts.md>           抽数字/日期/口径/结论供核对
   a4 render  <outline.md> -o <out.html> --target-pages N
   a4 topdf   <out.html> -o <out.pdf>             转曲输出可打印 PDF
   a4 verify  <out.pdf> [--target-pages N] [--thumb <png>]
