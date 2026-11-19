@@ -24,6 +24,8 @@ env/
 *_thumb.png
 *.pdf
 *.html
+# 本地试跑目录：缩略图拆页 png 之类的零散产物不受上面几条覆盖
+out/
 
 # 但仓库里自带的那几个 HTML/PDF 结尾的文档若将来需要，可用 ! 显式放行，例如：
 # !docs/example.html
