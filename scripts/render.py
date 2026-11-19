@@ -465,6 +465,11 @@ COLUMN_GAP_MM = 5.0
 READABLE_FLOOR = 8.4   # 分栏时的字号下限（pt），低于此值优先保证页数再考虑
 
 
+# 「好读 > 少纸」的量化：为了省页，字号最多愿意让这么多。
+# 超过它就不叫省纸，叫把字缩小——那时宁可多一页。
+COLUMN_SWAP_FONT_DROP = 2.0
+
+
 def block_stats(body_html: str) -> dict:
     """统计正文形态，用来判断该不该分栏。"""
     import re as _re
@@ -611,8 +616,9 @@ def main() -> int:
     ap.add_argument("--title", default=None)
     ap.add_argument("--subtitle", default="")
     ap.add_argument("--footer", default="")
-    ap.add_argument("--columns", type=int, default=1, choices=(1, 2, 3),
-                    help="正文分栏数。条目型内容用 2，散文/宽表格用 1（默认 1）")
+    ap.add_argument("--columns", type=int, default=None, choices=(1, 2, 3),
+                    help="正文分栏数。不传就把单栏和双栏各算一遍择优（推荐）；"
+                         "传 1 / 2 / 3 则强制该栏数")
     ap.add_argument("--span-headings", dest="span_headings", action="store_true",
                     default=None,
                     help="分栏时让 ## 小节标题通栏，保证小节不被栏缝切断（分栏时默认开启）")
@@ -621,7 +627,7 @@ def main() -> int:
     ap.add_argument("--pack-sections", action="store_true",
                     help="语义分栏：按实测高度把小节整块装进各栏（小节绝不跨栏，且尽量省页）")
     ap.add_argument("--auto-columns", action="store_true",
-                    help="按内容形态自动判断是否分栏（条目占比高才开 2 栏）")
+                    help="（已是默认行为，保留以兼容旧调用）单栏/双栏各算一遍择优")
     args = ap.parse_args()
     if args.target_pages < 1:
         ap.error("--target-pages 必须 ≥ 1")
@@ -642,7 +648,7 @@ def main() -> int:
     if not (args.title or doc_title):
         warn.append("outline 里没有 `#` 且未传 --title，标题回落为「摘要」")
 
-    def solve(cols: int) -> dict:
+    def solve(cols: int, pack: bool = False) -> dict:
         """给定栏数，跑完选档与语义分栏，返回完整方案。"""
         w = []
         st = block_stats(body)
@@ -700,7 +706,7 @@ def main() -> int:
             )
 
         body_out, packed_pages = body, 0
-        if cols > 1 and args.pack_sections:
+        if cols > 1 and (args.pack_sections or pack):
             # 语义分栏：栏高必须扣掉「页眉+页脚」实测高度，
             # 估高了会把整组挤到下一页、首页只剩标题。
             page_h = A4_H_PT - (7 + 4) * 72 / 25.4
@@ -728,34 +734,31 @@ def main() -> int:
     # --auto-columns：不靠启发式猜，直接把两种栏数都算一遍，按结果选。
     # 猜不准的实例：条目平均 42 字的一份速查，按「短行才划算」会判成单栏，
     # 但实测双栏 1 页 / 单栏 2 页。
-    blocked = columns_disallowed(body) if args.auto_columns else None
-    if args.auto_columns:
+    # 默认就实测择优：靠模型临场判断该不该分栏，稳定性不如把两种都算一遍。
+    auto = args.auto_columns or args.columns is None
+    blocked = columns_disallowed(body) if auto else None
+    if auto:
         if blocked:
+            # 已经在单栏了，别再报一堆「建议改单栏」的分栏警告——那是自己吓自己
             plan = solve(1)
             warn.append(f"自动分栏：{blocked}，按单栏排版")
-            for c in (2, 3):
-                warn += column_warnings(body, c)
         else:
-            one, two = solve(1), solve(2)
-            # 单栏是默认阅读体验，双栏必须赢得明显才换。
-            # 判据也按「好读 > 少纸」：
-            #   · 单栏已经溢出、双栏没有 → 必须换（否则交付不合格）；
-            #   · 双栏字号大 1.5pt 以上 → 换（跨两档才值得换阅读形式）；
-            #   · 字号不低于单栏且页数更少 → 换（同可读性下更省纸，双赢）；
-            #   · 其余一律留单栏。曾经把「页数更少」当第一判据，会选出
-            #     「单栏 11.1pt / 4 页 vs 双栏 8.4pt / 2 页」然后选了双栏，
-            #     那是拿可读性换纸。
+            # 双栏一律带上语义分栏（pack）再比：不带 pack 的双栏经常白花一页，
+            # 比出来的不是双栏的真实形态。实测 43 页标注规范：双栏 2 页 /
+            # 双栏+pack 1 页，单栏 2 页——不带 pack 就永远选不到双栏。
+            one, two = solve(1), solve(2, pack=True)
             one_bad = one["pages"] > args.target_pages
             two_bad = two["pages"] > args.target_pages
             if one_bad and not two_bad:
                 plan = two
             elif two["tier"][0] >= one["tier"][0] + 1.5:
-                plan = two
-            elif two["tier"][0] >= one["tier"][0] and two["pages"] < one["pages"]:
-                plan = two
+                plan = two          # 双栏明显更清楚，值得换阅读形式
+            elif (two["tier"][0] >= READABLE_FLOOR
+                  and two["pages"] < one["pages"]
+                  and two["tier"][0] >= one["tier"][0] - COLUMN_SWAP_FONT_DROP):
+                plan = two          # 在可读区间内省下整页纸
             else:
                 plan = one
-            plan["trail"] = one["trail"]
             if plan["columns"] > 1:
                 warn += column_warnings(body, plan["columns"], auto=True)
     else:

@@ -632,6 +632,24 @@ def t_columns() -> None:
     d, _ = run("render", str(wide_md), "-o", str(WORK / "c3.html"),
                "--target-pages", "9", "--auto-columns")
     check("分栏·宽表格自动选 1 栏", d["columns"] == 1, str(d["columns"]))
+    check("分栏·已在单栏时不再报「建议单栏」",
+          not any("建议 --columns 1" in x for x in d["warnings"]), str(d["warnings"]))
+
+    # 不传 --columns 就必须走实测择优，而不是默默退回单栏
+    d, _ = run("render", str(item_md), "-o", str(WORK / "c4.html"), "--target-pages", "1")
+    check("分栏·默认即实测择优（条目型出 2 栏）", d["columns"] == 2, str(d["columns"]))
+    d, _ = run("render", str(prose_md), "-o", str(WORK / "c5.html"), "--target-pages", "9")
+    check("分栏·默认即实测择优（散文型留 1 栏）", d["columns"] == 1, str(d["columns"]))
+
+    # 双栏必须带着语义分栏去比，否则双栏经常白花一页、永远选不中。
+    # 这份 fixture 实测：单栏 2 页 / 双栏 2 页 / 双栏+pack 1 页。
+    mixed = w("c_mixed.md", "# T\n\n"
+              + "\n\n".join(f"## 第 {i} 节\n\n" + "\n".join(
+                  f"- 第{i}-{j}条：二十字左右的短条目内容。" for j in range(4))
+                  for i in range(8)) + "\n")
+    d, _ = run("render", str(mixed), "-o", str(WORK / "c6.html"), "--target-pages", "2")
+    check("分栏·双栏带 pack 后能省下整页", d["columns"] == 2 and d["pages"] == 1,
+          f"栏 {d['columns']} 页 {d['pages']} 字号 {d['font_pt']}")
 
     d, _ = run("render", str(wide_md), "-o", str(WORK / "c4.html"),
                "--target-pages", "9", "--columns", "2")
@@ -791,7 +809,10 @@ def t_tier_pick() -> None:
             body += (f"某字段 {i * 100 + j} 万元，占 {i}.{j}%，"
                      f"较上年增长 {i} 个百分点，主要系订单结构变化所致。\n\n")
     p = w("tierpick.md", body)
-    d, _ = run("render", str(p), "-o", str(WORK / "tierpick.html"), "--target-pages", "2")
+    # 这条测的是「同一栏数内的选档优先级」，所以固定单栏：
+    # 不固定的话 auto 会拿双栏+pack 来比（本 fixture 双栏 1 页），选的就不是字号档了
+    d, _ = run("render", str(p), "-o", str(WORK / "tierpick.html"),
+               "--target-pages", "2", "--columns", "1")
     trail = d["trail"]
     check("选档·fixture 确实跨了页数档",
           any(t["pages"] < d["pages"] for t in trail),
@@ -808,7 +829,8 @@ def t_tier_pick() -> None:
           f"更少页的档={[(t['font_pt'], t['pages']) for t in trail if t['pages'] < d['pages']]}")
 
     # 显式降页数才是省纸的动作，且必须真的降一档字号
-    d2, _ = run("render", str(p), "-o", str(WORK / "tierpick1.html"), "--target-pages", "1")
+    d2, _ = run("render", str(p), "-o", str(WORK / "tierpick1.html"),
+                "--target-pages", "1", "--columns", "1")
     check("选档·降目标页数才缩字号",
           d2["pages"] == 1 and d2["font_pt"] < d["font_pt"],
           f"1 页时 {d2['font_pt']}pt；2 页时 {d['font_pt']}pt")
